@@ -1,0 +1,39 @@
+I need to fully integrate my app with an Alist server. Please update both `shared/schema.ts` and `server/routes.ts` to support file paths instead of URLs and to generate signed links automatically.
+
+Here are the specific changes required:
+
+### 1. Update `shared/schema.ts`
+Remove the `.url()` validation from the following fields so I can save Alist paths (like `/GD01/movie.mp4`) instead of full HTTP URLs:
+- In `insertContentItemSchema`, change `thumbnail` to `z.string()` (remove .url()).
+- Change `driveLink` to `z.string().optional()` (remove .url()).
+- Inside `seasons` -> `episodes`, change `link` to `z.string()` (remove .url()).
+
+### 2. Update `server/routes.ts`
+Refactor the code to use Alist for generating secure links.
+
+- **Environment Variables:** Use `ALIST_API_URL` (default to "https://mlwioalist.up.railway.app") and `ALIST_TOKEN` from `process.env`.
+
+- **Add Helper Function `getAlistSignedLink(path)`:**
+  - If `path` starts with "http" or "https", return it as is (legacy support).
+  - If it is a path (e.g., `/GD01/...`), send a POST request to `${ALIST_API_URL}/api/fs/get`.
+  - Headers: `Content-Type: application/json`, `Authorization: ALIST_TOKEN`.
+  - Body: `{ "path": path, "password": "" }`.
+  - Return the `data.data.raw_url` from the response.
+  - Log errors but return the original path if the fetch fails.
+
+- **Add Data Enrichment Function `enrichItemWithAlist(item)`:**
+  - Use `getAlistSignedLink` to process and replace:
+    1. `item.driveLink` (Main Movie)
+    2. `item.thumbnail` (Poster image)
+    3. `item.seasons[].episodes[].link` (Episodes)
+  - Use `Promise.all` to handle the async operations efficiently.
+
+- **Apply Enrichment to GET Routes:**
+  - Update `GET /api/content`, `GET /api/content/:id`, and `GET /api/content/search`.
+  - Before sending the JSON response, pass the content item(s) through `enrichItemWithAlist`.
+
+- **Update Download Route (`GET /api/download`):**
+  - If the `url` parameter is an Alist path (does not start with http), fetch the signed link using `getAlistSignedLink` and immediately `res.redirect()` to it.
+  - This bypasses the server proxy to save bandwidth.
+
+Please rewrite the necessary sections of these two files to implement these features robustly.

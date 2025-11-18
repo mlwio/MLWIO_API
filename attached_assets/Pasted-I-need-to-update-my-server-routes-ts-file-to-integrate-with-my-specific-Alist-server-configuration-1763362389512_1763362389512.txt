@@ -1,0 +1,38 @@
+I need to update my `server/routes.ts` file to integrate with my specific Alist server configuration.
+
+Current Setup:
+My Alist server is hosted at: https://mlwioalist.up.railway.app
+In my database, instead of full URLs, I am now saving file paths like `/GD01/Movies/Avatar.mp4` or `/GD02/Series/Ep1.mp4` (where GD01, GD02 are my Alist mount paths).
+
+Please refactor `server/routes.ts` to implement the following changes:
+
+1.  **Environment Variables:**
+    - Use `ALIST_API_URL` defaulting to "https://mlwioalist.up.railway.app".
+    - Use `ALIST_TOKEN` from `process.env`.
+
+2.  **Helper Function (`getAlistSignedLink`):**
+    Create an async function that takes a `path` string.
+    - **Check:** If `path` starts with "http" or "https", return it as is (legacy support for old links).
+    - **Fetch:** If it is a path (like `/GD01/...`), send a POST request to `${ALIST_API_URL}/api/fs/get`.
+    - **Headers:** `Content-Type: application/json`, `Authorization: process.env.ALIST_TOKEN`.
+    - **Body:** `{ "path": path, "password": "" }`.
+    - **Return:** Extract and return `data.data.raw_url` (this is the signed 3-hour link).
+    - **Error Handling:** If the fetch fails or file isn't found, return the original path.
+
+3.  **Data Processing (`enrichItemWithAlist`):**
+    Create an async function to process content items before sending them to the frontend. It should use `getAlistSignedLink` to replace:
+    - `item.driveLink` (Main video)
+    - `item.thumbnail` (Images stored in Alist)
+    - `item.seasons[].episodes[].link` (Episodes in GD01/GD02 etc.)
+
+4.  **Update API Routes:**
+    Apply `enrichItemWithAlist` to the responses of these routes:
+    - `GET /api/content`
+    - `GET /api/content/:id`
+    - `GET /api/content/search`
+
+5.  **Update Download Route (`/api/download`):**
+    - If the `url` query param is an Alist path (e.g., starts with `/GD01`), fetch the signed link using `getAlistSignedLink` and immediately `res.redirect()` to it.
+    - Do NOT proxy the download through the Node server (to save bandwidth).
+
+Please rewrite the code for `server/routes.ts` incorporating these specific Alist settings while preserving the existing authentication and database logic.
